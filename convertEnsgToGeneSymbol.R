@@ -1,3 +1,5 @@
+#author:abhishek sawalkar
+#This file is to convert enst to gene symbols in the columns of the input csv
 # Required Packages
 if (!require("BiocManager", quietly = TRUE))
   install.packages("BiocManager")
