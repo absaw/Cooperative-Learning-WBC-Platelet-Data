@@ -3,6 +3,7 @@
 library(dplyr)
 library(readr)
 library(multiview)
+library(ggplot2)
 setwd("~/Library/CloudStorage/Box-Box/KrishnanA-Stats-Share/LucyExtendedTermProjects/Project5-WBC_RNAseq-Analysis/WBC-Platelet-Coop-Learning-AS/Cooperative-Learning-WBC-Platelet-Data")
 #===============================================================================
 # PART 1 :: Pre-processing data
@@ -112,16 +113,17 @@ table(Y_test)
 #===============================================================================
 # PART 2 :: Model Fit
 #===============================================================================
-# multiview package doesn't support mutlinomial classification
-# so for our problem, with 4 different subtypes possible, one v/s all method 
-# needs to be used. Hence binomial() family then can be used for binary 
-#classifiaction
+
+# multiview package doesnt support mutlinomial classification
+# so for our problem, with 4 different subtypes possible, one v/s all method
+# needs to be used. Hence binomial() family then can be used for binary
+# classifiaction
 
 # Prepare Binary Labels for PV
 # Create binary labels: 1 for PV, 0 for others
-Y_binary_train <- as.numeric(Y_train == "PV")
+Y_binary_train <- as.numeric(Y_train == "ET")
 #Y_binary_val <- as.numeric(Y_val == "PV")
-Y_binary_test <- as.numeric(Y_test == "PV")
+Y_binary_test <- as.numeric(Y_test == "ET")
 
 # Check the distribution of binary labels
 cat("Training set distribution:\n")
@@ -131,66 +133,8 @@ cat("Validation set distribution:\n")
 cat("Test set distribution:\n")
 table(Y_binary_test)
 
-
-# Train the Binary Classifier for PV
-# Fit the cooperative learning model
-fit_pv <- multiview(x_train, Y_binary_train, family = binomial(), rho = 0.5)
-?multiview
-plot(fit_pv)
-
-# Evaluate the Model on the Test Set
-# Predict probabilities for the test set
-test_probabilities <- predict(fit_pv, newx = list(X_test,Z_test),s = c(0.01), type = "response")
-test_probabilities
-# Convert probabilities to binary predictions (threshold = 0.5)
-test_predictions <- as.numeric(test_probabilities > 0.5)
-
-# Calculate test accuracy
-test_accuracy <- mean(test_predictions == Y_binary_test)
-cat("Test Accuracy for PV:", test_accuracy, "\n")
-
-# Confusion Matrix for Test Set
-cat("Confusion Matrix for Test Set:\n")
-print(table(Predicted = test_predictions, Actual = Y_binary_test))
-
-# Analyze Feature Importance
-# Extract coefficients for X (platelet data) and Z (WBC data)
-coef <- coef(fit_pv,s=0.1)
-coef
-coef_matrix <- as.matrix(coef)
-
-# Remove the intercept (row 1)
-coef_matrix <- coef_matrix[-1, , drop = FALSE]
-
-# Get feature names and their coefficients
-feature_names <- rownames(coef_matrix)
-coefficients <- as.numeric(coef_matrix)
-
-# Combine into a data frame for sorting
-coef_df <- data.frame(Feature = feature_names, Coefficient = coefficients)
-
-# Rank by absolute value of the coefficients
-top_features <- coef_df %>%
-  filter(Coefficient != 0) %>%
-  arrange(desc(abs(Coefficient))) %>%
-  head(20)
-
-# Display the top 20 features
-print(top_features)
-library(ggplot2)
-
-# Create a bar plot of the top 10 features
-ggplot(top_features, aes(x = reorder(Feature, Coefficient), y = Coefficient)) +
-  geom_bar(stat = "identity", fill = "steelblue") +
-  coord_flip() +
-  labs(title = "PV Top 20 Features by Coefficient: Binomial Distribution", x = "Feature", y = "Coefficient") +
-  theme_minimal()
-
-
 # Perform cross-validation to find the optimal lambda
 cvfit <- cv.multiview(x_train, Y_binary_train, family = binomial(), type.measure = "class")
-
-# Optimal lambda minimizing cross-validation error
 best_lambda <- cvfit$lambda.min
 
 # Lambda with the most regularization that is within 1 standard error of the minimum error
@@ -198,14 +142,15 @@ lambda_1se <- cvfit$lambda.1se
 
 # Plot cross-validation results
 plot(cvfit)
-
 # Highlight the selected lambda values
 abline(v = log(best_lambda), col = "blue", lty = 2)  # Optimal lambda
 abline(v = log(lambda_1se), col = "red", lty = 2)    # 1-SE lambda
 
 # Refit the model with the optimal lambda
 fit_optimized <- multiview(x_train, Y_binary_train, family = binomial(), lambda = best_lambda)
-
+best_rho <- fit_optimized$rho
+best_rho
+# Optimal lambda minimizing cross-validation error
 # Make predictions on the test set
 test_probabilities <- predict(fit_optimized, newx = x_test, s = best_lambda, type = "response")
 
@@ -215,6 +160,60 @@ test_predictions <- as.numeric(test_probabilities > 0.5)
 # Calculate test accuracy
 test_accuracy <- mean(test_predictions == Y_binary_test)
 cat("Test Accuracy with Optimized Lambda:", test_accuracy, "\n")
+# Confusion Matrix for Test Set
+cat("Confusion Matrix for Test Set:\n")
+print(table(Predicted = test_predictions, Actual = Y_binary_test))
+# Analyze Feature Importance
+# Extract coefficients for X (platelet data) and Z (WBC data)
+coef <- coef(fit_optimized, s = best_lambda)
+coef_matrix <- as.matrix(coef)
+# Remove the intercept (row 1)
+coef_matrix <- coef_matrix[-1, , drop = FALSE]
+# Get feature names and their coefficients
+feature_names <- rownames(coef_matrix)
+coefficients <- as.numeric(coef_matrix)
+# Combine into a data frame for sorting
+coef_df <- data.frame(Feature = feature_names, Coefficient = coefficients)
+# Rank by absolute value of the coefficients
+top_features <- coef_df %>%
+  filter(Coefficient != 0) %>%
+  arrange(desc(abs(Coefficient))) %>%
+  head(20)
+# Display the top 20 features
+print(top_features)
+
+# Create a bar plot of the top 10 features
+plt <-ggplot(top_features, aes(x = reorder(Feature, Coefficient), y = Coefficient)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +
+  labs(title = "PV : Top 20 Features by Coefficient", x = "Feature", y = "Coefficient") +
+  theme_minimal()
+plt <- plt + theme(
+  panel.background = element_rect(fill = "white"),  # Light background
+  plot.background = element_rect(fill = "white"),   # Light outer background
+  axis.text = element_text(color = "black"),        # Black axis text
+  axis.title = element_text(color = "black"),       # Black axis titles
+  plot.title = element_text(color = "black", face = "bold")  # Black title
+)
+ggsave('images/PVTopFeatures.png')
+
+# Define rho (agreement penalty)
+rho <- 0.3
+
+# Prepare input data
+view_list <- list(X = X_train, Z = Z_train)  # Platelet (X) and WBC (Z) data
+
+# Evaluate view contribution
+contribution <- view.contribution(
+  x_list = view_list,      # List of views
+  y = Y_binary_train,      # Target variable
+  rho = rho,               # Agreement penalty
+  family = binomial(),     # Model family (binomial for classification)
+  eval_data = list(X_train, Z_train)  # Optional: Data for evaluation
+)
+
+# Print contribution results
+print(contribution)
 # Save the Model
 # Save the fitted model for later use
 #saveRDS(fit_pv, file = "model/pv_cooperative_learning_model.rds")
@@ -222,9 +221,175 @@ cat("Test Accuracy with Optimized Lambda:", test_accuracy, "\n")
 # To load the model in future:
 # fit_pv <- readRDS("pv_cooperative_learning_model.rds")
 
-
+# rho_grid <- c(0.01, 0.1, 0.5, 1)
+# 
+# results <- lapply(rho_grid, function(rho) {
+#   cv.multiview(x_train, Y_binary_train, family = binomial(), rho = rho, type.measure = "class")
+# })
+# 
+# # Extract the best rho and corresponding performance
+# errors <- sapply(results, function(cvfit) min(cvfit$cvm))
+# best_rho <- rho_grid[which.min(errors)]
+# cat("Best rho:", best_rho, "\n")
 #Debugging 
 cat("Number of rows in X_test:", nrow(X_test), "\n")
 cat("Number of rows in Z_test:", nrow(Z_test), "\n")
 cat("Length of Y_binary_test:", length(Y_binary_test), "\n")
 cat("Length of test_predictions:", length(test_predictions), "\n")
+
+
+
+# Function for all classes
+# Define a function to process a given class
+process_class <- function(class_name, x_train, Y_train, x_test, Y_test, output_dir) {
+  # Binary labeling for the target class
+  Y_binary_train <- as.numeric(Y_train == class_name)
+  Y_binary_test <- as.numeric(Y_test == class_name)
+  
+  # Check the distribution of binary labels
+  cat("Training set distribution for", class_name, ":\n")
+  print(table(Y_binary_train))
+  cat("Test set distribution for", class_name, ":\n")
+  print(table(Y_binary_test))
+  
+  # Perform cross-validation to find the optimal lambda
+  cvfit <- cv.multiview(x_train, Y_binary_train, family = binomial(), type.measure = "class")
+  best_lambda <- cvfit$lambda.min
+  lambda_1se <- cvfit$lambda.1se
+  
+  # Plot cross-validation results
+  cvplot<-plot(cvfit)+
+      abline(v = log(best_lambda), col = "blue", lty = 2)+
+      abline(v = log(lambda_1se), col = "red", lty = 2)    # 1-SE lambda
+  
+  # Save the plot
+  ggsave(filename = paste0(output_dir, "/", class_name, "_CVPlot.png"))
+  
+  # Refit the model with the optimal lambda
+  fit_optimized <- multiview(x_train, Y_binary_train, family = binomial(), lambda = lambda_1se)
+  
+  # Extract the best rho
+  best_rho <- fit_optimized$rho
+  cat("Best rho for", class_name, ":", best_rho, "\n")
+  
+  # Make predictions on the test set
+  test_probabilities <- predict(fit_optimized, newx = x_test, s = lambda_1se, type = "response")
+  test_predictions <- as.numeric(test_probabilities > 0.5)
+  
+  # Calculate test accuracy
+  test_accuracy <- mean(test_predictions == Y_binary_test)
+  cat("Test Accuracy for", class_name, ":", test_accuracy, "\n")
+  # Collect model details
+  model_details <- data.frame(
+    Class = class_name,
+    BestLambda = best_lambda,
+    Lambda1SE = lambda_1se,
+    BestRho = best_rho,
+    TestAccuracy = test_accuracy
+  )
+  
+  # Save or append results to the CSV file
+  if (!file.exists(results_file)) {
+    write.csv(model_details, results_file, row.names = FALSE)  # Create a new file
+  } else {
+    write.table(model_details, results_file, row.names = FALSE, col.names = FALSE, sep = ",", append = TRUE)  # Append to the file
+  }
+  # Confusion Matrix
+  cat("Confusion Matrix for Test Set for", class_name, ":\n")
+  print(table(Predicted = test_predictions, Actual = Y_binary_test))
+  
+  # Analyze Feature Importance
+  coef <- coef(fit_optimized, s = best_lambda)
+  coef_matrix <- as.matrix(coef)[-1, , drop = FALSE]  # Remove intercept
+  feature_names <- rownames(coef_matrix)
+  coefficients <- as.numeric(coef_matrix)
+  coef_df <- data.frame(Feature = feature_names, Coefficient = coefficients)
+  
+  # Get top 20 features
+  top_features <- coef_df %>%
+    filter(Coefficient != 0) %>%
+    arrange(desc(abs(Coefficient))) %>%
+    head(20)
+  cat("Top Features for", class_name, ":\n")
+  print(top_features)
+  
+  # Create a bar plot of the top 20 features
+  plt <- ggplot(top_features, aes(x = reorder(Feature, Coefficient), y = Coefficient)) +
+    geom_bar(stat = "identity", fill = "steelblue") +
+    coord_flip() +
+    labs(title = paste0(class_name, ": Top Features by Coefficient"), x = "Feature", y = "Coefficient") +
+    theme_minimal()+ 
+    theme(
+      panel.background = element_rect(fill = "white"),  # Light background
+      plot.background = element_rect(fill = "white"),   # Light outer background
+      axis.text = element_text(color = "black"),        # Black axis text
+      axis.title = element_text(color = "black"),       # Black axis titles
+      plot.title = element_text(color = "black", face = "bold")  # Black title
+    )
+  
+  # Display and save the plot
+  plt
+  print(plt)
+  ggsave(filename = paste0(output_dir, "/", class_name, "_TopFeatures.png"))
+}
+# Classes to process
+classes <- c("PV","ET", "MF", "CTRL")
+
+# Output directory to save results
+output_dir <- "images_1sde"
+if (!dir.exists(output_dir)) {
+  dir.create(output_dir)
+}
+# CSV file to save results
+results_file <- "results/model_details_1sde.csv"
+if (file.exists(results_file)) {
+  file.remove(results_file)  # Remove old file if exists
+}
+process_class(classes[1], x_train, Y_train, x_test, Y_test, output_dir)
+# Iterate over classes and process each one
+for (class_name in classes) {
+  process_class(class_name, x_train, Y_train, x_test, Y_test, output_dir)
+}
+
+
+# Classes to process
+classes <- c("PV", "ET", "MF", "CTRL")
+
+# Initialize a matrix to store probabilities for all classes
+test_probabilities_matrix <- matrix(0, nrow = length(Y_test), ncol = length(classes))
+colnames(test_probabilities_matrix) <- classes
+
+# Iterate over classes to train binary classifiers and get probabilities
+for (i in seq_along(classes)) {
+  class_name <- classes[i]
+  
+  # Binary labeling for the target class
+  Y_binary_train <- as.numeric(Y_train == class_name)
+  Y_binary_test <- as.numeric(Y_test == class_name)
+  
+  # Perform cross-validation to find the optimal lambda
+  cvfit <- cv.multiview(x_train, Y_binary_train, family = binomial(), type.measure = "class")
+  best_lambda <- cvfit$lambda.min
+  
+  # Refit the model with the optimal lambda
+  fit_optimized <- multiview(x_train, Y_binary_train, family = binomial(), lambda = best_lambda)
+  
+  # Get probabilities for the test set
+  test_probabilities <- predict(fit_optimized, newx = x_test, s = best_lambda, type = "response")
+  
+  # Store probabilities for this class
+  test_probabilities_matrix[, i] <- test_probabilities
+}
+
+# Convert probabilities to final predictions
+# Assign each sample to the class with the highest probability
+final_predictions <- colnames(test_probabilities_matrix)[max.col(test_probabilities_matrix)]
+
+# Calculate accuracy of multinomial classification
+multinomial_accuracy <- mean(final_predictions == Y_test)
+cat("Multinomial Classification Accuracy:", multinomial_accuracy, "\n")
+
+# Confusion matrix for multinomial classification
+multinomial_confusion_matrix <- table(Predicted = final_predictions, Actual = Y_test)
+cat("Confusion Matrix for Multinomial Classification:\n")
+print(multinomial_confusion_matrix)
