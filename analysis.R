@@ -9,36 +9,75 @@ setwd("~/Library/CloudStorage/Box-Box/KrishnanA-Stats-Share/LucyExtendedTermProj
 # PART 1 :: Pre-processing data
 #===============================================================================
 # Load the datasets
+# Load the datasets
+# Load data
+platelet_data <- read.csv("data/NormCountsPlatelet.csv", stringsAsFactors = FALSE)
+wbc_data <- read.csv("data/NormCountsWBC.csv", stringsAsFactors = FALSE)
+outcome_data <- read.csv("data/DeSeq2_AllData_n120_PTPRCadj.csv", stringsAsFactors = FALSE)
 
-platelet_data <- read.csv("data/NormCountsPlatelet.csv")
-wbc_data <- read_csv("data/NormCountsWBC.csv")
-outcome_data <- read_csv("data/DeSeq2_AllData_n120_PTPRCadj.csv")
+# Function to clean sample names
+clean_sample_names <- function(data) {
+  # Remove rows with ".y" suffix in the sample name
+  data <- data[!grepl("\\.y$", data[[1]]), ]
+  # Set row names and remove ".x" suffix
+  rownames(data) <- gsub("\\.x$", "", data[[1]])
+  data <- data[, -1]  # Remove the first column
+  return(data)
+}
 
+# Apply cleaning function to each dataset
+platelet_data <- clean_sample_names(platelet_data)
+wbc_data <- clean_sample_names(wbc_data)
+outcome_data <- clean_sample_names(outcome_data)
+
+# Verify changes
+cat("Updated sample names in platelet_data:\n", head(rownames(platelet_data)), "\n")
+cat("Updated sample names in wbc_data:\n", head(rownames(wbc_data)), "\n")
+cat("Updated sample names in outcome_data:\n", head(rownames(outcome_data)), "\n")
 # Extract patient IDs
-platelet_patients <- platelet_data[[1]]
-wbc_patients <- wbc_data[[1]]
-outcome_patients <- outcome_data[[1]]
+platelet_patients <- rownames(platelet_data)
+wbc_patients <- rownames(wbc_data)
+outcome_patients <- rownames(outcome_data)
 
 # Find common patients
 common_patients <- intersect(intersect(platelet_patients, wbc_patients), outcome_patients)
-length(common_patients)
+cat("Number of common patients:", length(common_patients), "\n")
+
+
+
+
+# platelet_data <- read.csv("data/NormCountsPlatelet.csv")
+# wbc_data <- read_csv("data/NormCountsWBC.csv")
+# outcome_data <- read_csv("data/DeSeq2_AllData_n120_PTPRCadj.csv")
+# 
+# # Remove ".x" suffix from sample names in X and Z
+# rownames(platelet_data) <- gsub("\\.x$", "", rownames(platelet_data))  # For X (Platelet data)
+# rownames(wbc_data) <- gsub("\\.x$", "", rownames(wbc_data))  # For Z (WBC data)
+# rownames(outcome_data) <- gsub("\\.x$", "", rownames(outcome_data)) 
+# # Verify the changes
+# cat("Updated sample names in X:\n", head(rownames()), "\n")
+# cat("Updated sample names in Z:\n", head(rownames(Z)), "\n")
+# # Extract patient IDs
+# platelet_patients <- platelet_data[[1]]
+# wbc_patients <- wbc_data[[1]]
+# outcome_patients <- outcome_data[[1]]
+# # Find common patients
+# common_patients <- intersect(intersect(platelet_patients, wbc_patients), outcome_patients)
+# length(common_patients)
+
 
 # Subset the data for common patients
-# Filter rows for common patients and remove the first column (patient IDs)
-#X <- platelet_data %>% filter(.[[1]] %in% common_patients)
-X <- platelet_data %>% filter(.[[1]] %in% common_patients)
-Z <- wbc_data %>% filter(.[[1]] %in% common_patients) 
-Y <- outcome_data %>% filter(.[[1]] %in% common_patients)
+X <- platelet_data[common_patients, , drop = FALSE]  # Subset rows using rownames
+Z <- wbc_data[common_patients, , drop = FALSE]       # Subset rows using rownames
+Y <- outcome_data[common_patients, , drop = FALSE]   # Subset rows using rownames
 
-# Ensure the order of rows is consistent across datasets
-X <- X %>% arrange(.[[1]])
-Y <- Y %>% arrange(.[[1]])
-Z <- Z %>% arrange(.[[1]])
+# Sort the datasets by rownames to ensure consistent order
+X <- X[order(rownames(X)), ]
+Z <- Z[order(rownames(Z)), ]
+Y <- Y[order(rownames(Y)), ]
 
-# to remove first column of sampleids
-X <- X %>% select(-1)
-Z <- Z %>% select(-1)
-MPNDisease<-Y %>% select(2)
+# Extract the MPNDisease column
+MPNDisease <- Y[, 1, drop = FALSE]  # Keep it as a data frame
 
 # Rename columns to distinguish views
 colnames(X) <- paste0("X_", colnames(X))  # Add "X_" prefix to platelet data
@@ -50,21 +89,24 @@ X_normalized <- scale(X)  # Normalize platelet data
 Z_normalized <- scale(Z)  # Normalize WBC data
 X <- X_normalized
 Z <- Z_normalized
-combined_data <- data.frame(X, Z, MPNDisease = MPNDisease[[1]])
+#combined_data <- data.frame(X, Z, MPNDisease = MPNDisease[[1]])
 
 # Set seed for reproducibility
 set.seed(123)
 
 # Define split ratios
-train_ratio <- 0.8
+train_ratio <- 0.5
 val_ratio <- 0
-test_ratio <- 0.2
+test_ratio <- 0.5
 
 # Number of samples
-n <- nrow(combined_data)
+n <- nrow(X)
 train_size = floor(train_ratio * n)
+train_size
 val_size= floor(val_ratio*n)
+val_size
 test_size = n-train_size-val_size
+test_size
 # Generate random indices for training, validation, and test sets
 # Generate a shuffled sequence of row indices
 shuffled_indices <- sample(seq_len(n))
@@ -96,9 +138,9 @@ Y_test <- MPNDisease[test_indices, ]
 
 # Prepare data for multiview package
 # Convert MPNDisease to a factor
-Y_train <- as.factor(Y_train[[1]])
+Y_train <- as.factor(Y_train)
 #Y_val <- as.factor(Y_val[[1]])
-Y_test <- as.factor(Y_test[[1]])
+Y_test <- as.factor(Y_test)
 
 # Create predictor lists for the multiview package
 x_train <- list(X_train, Z_train)
