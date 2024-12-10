@@ -91,6 +91,9 @@ X <- X_normalized
 Z <- Z_normalized
 #combined_data <- data.frame(X, Z, MPNDisease = MPNDisease[[1]])
 
+#===============================================================================
+# Random sampling
+#===============================================================================
 # Set seed for reproducibility
 set.seed(123)
 
@@ -119,12 +122,18 @@ train_indices <- shuffled_indices[1:train_size]
 
 # Assign the remaining indices to the test set
 test_indices <- shuffled_indices[(train_size + val_size + 1):n]
-
-
+# For stratified sampling
+library(caret)  
+set.seed(123)
+# Stratified sampling to preserve class proportions
+n <- nrow(X)
+MPNDisease <- Y[, 1, drop = TRUE]
+train_indices <- createDataPartition(MPNDisease, p = train_ratio, list = FALSE)
+test_indices <- setdiff(seq_len(n), train_indices)
 # Training set
 X_train <- X[train_indices, ]
 Z_train <- Z[train_indices, ]
-Y_train <- MPNDisease[train_indices, ]
+Y_train <- MPNDisease[train_indices]
 
 # Validation set
 #X_val <- X[val_indices, ]
@@ -134,7 +143,7 @@ Y_train <- MPNDisease[train_indices, ]
 # Test set
 X_test <- X[test_indices, ]
 Z_test <- Z[test_indices, ]
-Y_test <- MPNDisease[test_indices, ]
+Y_test <- MPNDisease[test_indices]
 
 # Prepare data for multiview package
 # Convert MPNDisease to a factor
@@ -164,9 +173,10 @@ table(Y_test)
 # Prepare Binary Labels for PV
 # Create binary labels: 1 for PV, 0 for others
 Y_binary_train <- as.numeric(Y_train == "ET")
+Y_binary_train
 #Y_binary_val <- as.numeric(Y_val == "PV")
 Y_binary_test <- as.numeric(Y_test == "ET")
-
+Y_binary_test
 # Check the distribution of binary labels
 cat("Training set distribution:\n")
 table(Y_binary_train)
@@ -308,14 +318,14 @@ process_class <- function(class_name, x_train, Y_train, x_test, Y_test, output_d
   ggsave(filename = paste0(output_dir, "/", class_name, "_CVPlot.png"))
   
   # Refit the model with the optimal lambda
-  fit_optimized <- multiview(x_train, Y_binary_train, family = binomial(), lambda = lambda_1se)
+  fit_optimized <- multiview(x_train, Y_binary_train, family = binomial(), lambda = best_lambda)
   
   # Extract the best rho
   best_rho <- fit_optimized$rho
   cat("Best rho for", class_name, ":", best_rho, "\n")
   
   # Make predictions on the test set
-  test_probabilities <- predict(fit_optimized, newx = x_test, s = lambda_1se, type = "response")
+  test_probabilities <- predict(fit_optimized, newx = x_test, s = best_lambda, type = "response")
   test_predictions <- as.numeric(test_probabilities > 0.5)
   
   # Calculate test accuracy
@@ -374,24 +384,142 @@ process_class <- function(class_name, x_train, Y_train, x_test, Y_test, output_d
   print(plt)
   ggsave(filename = paste0(output_dir, "/", class_name, "_TopFeatures.png"))
 }
+
+# 2 ======================
+process_class <- function(class_name, x_train, Y_train, x_test, Y_test, output_dir) {
+  # Binary labeling for the target class
+  Y_binary_train <- as.numeric(Y_train == class_name)
+  Y_binary_test <- as.numeric(Y_test == class_name)
+  
+  # Check the distribution of binary labels
+  cat("Training set distribution for", class_name, ":\n")
+  print(table(Y_binary_train))
+  cat("Test set distribution for", class_name, ":\n")
+  print(table(Y_binary_test))
+  
+  # Perform cross-validation to find the optimal lambda
+  cvfit <- cv.multiview(x_train, Y_binary_train, family = binomial(), type.measure = "class")
+  best_lambda <- cvfit$lambda.min
+  lambda_1se <- cvfit$lambda.1se
+  
+  # Plot cross-validation results
+png(filename = paste0(output_dir, "/", class_name, "_CVPlot.png"), width = 800, height = 600)
+plot(cvfit)
+abline(v = log(best_lambda), col = "blue", lty = 2)
+abline(v = log(lambda_1se), col = "red", lty = 2)
+dev.off()  # Close the graphics device
+  
+  # Refit the model with the optimal lambda
+  fit_optimized <- multiview(x_train, Y_binary_train, family = binomial(), lambda = lambda_1se)
+  
+  # Extract the best rho
+  best_rho <- fit_optimized$rho
+  cat("Best rho for", class_name, ":", best_rho, "\n")
+  
+  # Make predictions on the test set
+  test_probabilities <- predict(fit_optimized, newx = x_test, s = lambda_1se, type = "response")
+  test_predictions <- as.numeric(test_probabilities > 0.5)
+  
+  # Calculate test accuracy
+  test_accuracy <- mean(test_predictions == Y_binary_test)
+  cat("Test Accuracy for", class_name, ":", test_accuracy, "\n")
+  
+  # Collect model details
+  model_details <- data.frame(
+    Class = class_name,
+    BestLambda = best_lambda,
+    Lambda1SE = lambda_1se,
+    BestRho = best_rho,
+    TestAccuracy = test_accuracy
+  )
+  
+  # Save or append results to the CSV file
+  if (!file.exists(results_file)) {
+    write.csv(model_details, results_file, row.names = FALSE)  # Create a new file
+  } else {
+    write.table(model_details, results_file, row.names = FALSE, col.names = FALSE, sep = ",", append = TRUE)  # Append to the file
+  }
+  
+  # Confusion Matrix
+  cat("Confusion Matrix for Test Set for", class_name, ":\n")
+  print(table(Predicted = test_predictions, Actual = Y_binary_test))
+  
+  # Plot and save the confusion matrix
+  confusion_data <- as.data.frame(table(Predicted = test_predictions, Actual = Y_binary_test))
+  confusion_plot <- ggplot(confusion_data, aes(x = Actual, y = Predicted)) +
+    geom_tile(aes(fill = Freq), color = "white") +
+    geom_text(aes(label = Freq), size = 5) +
+    scale_fill_gradient(low = "white", high = "blue") +
+    labs(title = paste("Confusion Matrix for", class_name), x = "Actual", y = "Predicted") +
+    theme_minimal()
+  
+  ggsave(
+    filename = paste0(output_dir, "/", class_name, "_ConfusionMatrix.png"),
+    plot = confusion_plot, dpi = 300, width = 8, height = 6
+  )
+  
+  # Analyze Feature Importance
+  coef <- coef(fit_optimized, s = best_lambda)
+  coef_matrix <- as.matrix(coef)[-1, , drop = FALSE]  # Remove intercept
+  feature_names <- rownames(coef_matrix)
+  coefficients <- as.numeric(coef_matrix)
+  coef_df <- data.frame(Feature = feature_names, Coefficient = coefficients)
+  
+  # Get top 20 features
+  top_features <- coef_df %>%
+    filter(Coefficient != 0) %>%
+    arrange(desc(abs(Coefficient))) %>%
+    head(20)
+  cat("Top Features for", class_name, ":\n")
+  print(top_features)
+  
+  # Save top features to a CSV file
+  write.csv(
+    top_features,
+    file = paste0(output_dir, "/", class_name, "_TopFeatures.csv"),
+    row.names = FALSE
+  )
+  
+  # Create a bar plot of the top 20 features
+  plt <- ggplot(top_features, aes(x = reorder(Feature, Coefficient), y = Coefficient)) +
+    geom_bar(stat = "identity", fill = "steelblue") +
+    coord_flip() +
+    labs(title = paste0(class_name, ": Top Features by Coefficient"), x = "Feature", y = "Coefficient") +
+    theme_minimal() + 
+    theme(
+      panel.background = element_rect(fill = "white"),  # Light background
+      plot.background = element_rect(fill = "white"),   # Light outer background
+      axis.text = element_text(color = "black"),        # Black axis text
+      axis.title = element_text(color = "black"),       # Black axis titles
+      plot.title = element_text(color = "black", face = "bold")  # Black title
+    )
+  
+  # Save the plot
+  ggsave(
+    filename = paste0(output_dir, "/", class_name, "_TopFeatures.png"),
+    plot = plt, dpi = 300, width = 8, height = 6
+  )
+}
+
 # Classes to process
 classes <- c("PV","ET", "MF", "CTRL")
 
 # Output directory to save results
-output_dir <- "images_1sde"
+output_dir <- "results_stratified_sampled"
 if (!dir.exists(output_dir)) {
   dir.create(output_dir)
 }
 # CSV file to save results
-results_file <- "results/model_details_1sde.csv"
+results_file <- "results_stratified_sampled/model_details.csv"
 if (file.exists(results_file)) {
   file.remove(results_file)  # Remove old file if exists
 }
-process_class(classes[1], x_train, Y_train, x_test, Y_test, output_dir)
+process_class(classes[4], x_train, Y_train, x_test, Y_test, output_dir)
 # Iterate over classes and process each one
 for (class_name in classes) {
   process_class(class_name, x_train, Y_train, x_test, Y_test, output_dir)
 }
+
 
 
 # Classes to process
