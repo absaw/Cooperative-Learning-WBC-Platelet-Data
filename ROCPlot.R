@@ -9,7 +9,7 @@ library(PRROC)
 # Read the results file for predictions
 setwd("~/Library/CloudStorage/Box-Box/KrishnanA-Stats-Share/LucyExtendedTermProjects/Project5-WBC_RNAseq-Analysis/WBC-Platelet-Coop-Learning-AS/Cooperative-Learning-WBC-Platelet-Data")
 
-results <- read.csv("results/co-op_learning/results_whole_dataset_prediction/MF_Predictions.csv")
+results <- read.csv("results/co-op_learning/results_whole_dataset_prediction2/MF_Predictions.csv")
 
 # Verify the structure of the results file
 head(results)
@@ -39,9 +39,9 @@ cat("AUROC Score for MF vs Not MF:", roc_results$auc, "\n")
 #===============================================================================
 # PART 4: Save ROC Data for Plotting
 #===============================================================================
-# Convert ROC curve to a data frame for custom plotting
-roc_df <- data.frame(FPR = roc_results$curve[,1],  # False Positive Rate
-                     TPR = roc_results$curve[,2]) # True Positive Rate
+# # Convert ROC curve to a data frame for custom plotting
+# roc_df <- data.frame(FPR = roc_results$curve[,1],  # False Positive Rate
+#                      TPR = roc_results$curve[,2]) # True Positive Rate
 #===============================================================================
 # PART 5: Plot the ROC Curve for MF Only
 #===============================================================================
@@ -74,10 +74,13 @@ p <- ggplot() +
         axis.text.y = element_text(size = 16), 
         axis.text.x = element_text(size = 16), 
         legend.position = "bottom")
-
+# Add AUC annotation to the plot
+p <- p + annotate("text", x = 0.85, y = 0.05, 
+                  label = paste("AUC =", round(roc_results$auc, 3)), 
+                  size = 6, color = "black", fontface = "bold")
 # Display the plot
 print(p)
 
-output_dir <- "results/co-op_learning/results_whole_dataset_prediction"
+output_dir <- "results/co-op_learning/results_whole_dataset_prediction2"
 # Save the ROC plot as a PNG file
 ggsave(paste0(output_dir,"/MF_ROC_Curve.png"), plot = p, width = 8, height = 6, dpi = 300)

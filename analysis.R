@@ -575,25 +575,207 @@ predict_on_whole_dataset <- function(class_name, x_train, Y_train, x_test, Y_tes
   cat("Results saved for class", class_name, "\n")
   print(head(all_results))
 }
+#4
+predict_on_whole_dataset <- function(class_name, x_train, Y_train, x_test, Y_test, output_dir, results_file) {
+  # Binary labeling for the target class
+  Y_binary_train <- as.numeric(Y_train == class_name)
+  Y_binary_test <- as.numeric(Y_test == class_name)
+  
+  #===============================================================================
+  # Train the model on the training set and predict on the test set
+  #===============================================================================
+  cvfit_train <- cv.multiview(x_train, Y_binary_train, family = binomial(), type.measure = "class")
+  best_lambda <- cvfit_train$lambda.min
+  
+  fit_train <- multiview(x_train, Y_binary_train, family = binomial(), lambda = best_lambda)
+  test_probabilities <- predict(fit_train, newx = x_test, s = best_lambda, type = "response")
+  test_predictions <- as.numeric(test_probabilities > 0.5)
+  
+  #===============================================================================
+  # Train the model on the test set and predict on the train set
+  #===============================================================================
+  cvfit_test <- cv.multiview(x_test, Y_binary_test, family = binomial(), type.measure = "class")
+  best_lambda_test <- cvfit_test$lambda.min
+  
+  fit_test <- multiview(x_test, Y_binary_test, family = binomial(), lambda = best_lambda_test)
+  train_probabilities <- predict(fit_test, newx = x_train, s = best_lambda_test, type = "response")
+  train_predictions <- as.numeric(train_probabilities > 0.5)
+  
+  #===============================================================================
+  # Combine Predictions for Both Sets
+  #===============================================================================
+  results_train <- data.frame(
+    Sample_ID = rownames(x_train[[1]]),
+    Predicted_Probability = train_probabilities,
+    Predicted_Label = ifelse(train_predictions == 1, class_name, paste("Not", class_name)),
+    Actual_Label = ifelse(Y_binary_train == 1, class_name, paste("Not", class_name))
+  )
+  
+  results_test <- data.frame(
+    Sample_ID = rownames(x_test[[1]]),
+    Predicted_Probability = test_probabilities,
+    Predicted_Label = ifelse(test_predictions == 1, class_name, paste("Not", class_name)),
+    Actual_Label = ifelse(Y_binary_test == 1, class_name, paste("Not", class_name))
+  )
+  
+  all_results <- rbind(results_train, results_test) %>%
+    arrange(Sample_ID)
+  write.csv(all_results, file = paste0(output_dir, "/", class_name, "_Predictions.csv"), row.names = FALSE)
+  
+  #===============================================================================
+  # Save Model Details
+  #===============================================================================
+  # Calculate accuracies
+  train_accuracy <- mean(train_predictions == Y_binary_train)
+  test_accuracy <- mean(test_predictions == Y_binary_test)
+  
+  # Save Model Details
+  model_details <- data.frame(
+    Model = c("Train", "Test"),
+    BestLambda = c(best_lambda, best_lambda_test),
+    Rho = c(fit_train$rho, fit_test$rho),
+    Accuracy = c(train_accuracy, test_accuracy)
+  )
+  write.csv(model_details, file = paste0(output_dir, "/", class_name, "_ModelDetails.csv"), row.names = FALSE)
+  
+  #===============================================================================
+  # Save Coefficients (Feature Importance)
+  #===============================================================================
+  # Extract coefficients for the training model
+  coef_train <- as.matrix(coef(fit_train, s = best_lambda))[-1, , drop = FALSE]  # Remove intercept
+  coef_train_df <- data.frame(Feature = rownames(coef_train), Coefficient = coef_train[, 1])
+  coef_train_df <- coef_train_df %>%
+    filter(Coefficient != 0) %>%
+    arrange(desc(abs(Coefficient)))
+  write.csv(coef_train_df, file = paste0(output_dir, "/", class_name, "_Train_TopFeatures.csv"), row.names = FALSE)
+  
+  # Extract coefficients for the test model
+  coef_test <- as.matrix(coef(fit_test, s = best_lambda_test))[-1, , drop = FALSE]  # Remove intercept
+  coef_test_df <- data.frame(Feature = rownames(coef_test), Coefficient = coef_test[, 1])
+  coef_test_df <- coef_test_df %>%
+    filter(Coefficient != 0) %>%
+    arrange(desc(abs(Coefficient)))
+  write.csv(coef_test_df, file = paste0(output_dir, "/", class_name, "_Test_TopFeatures.csv"), row.names = FALSE)
+  
+  #===============================================================================
+  # Output to Console for Verification
+  #===============================================================================
+  cat("Results saved for class", class_name, "\n")
+  print(head(all_results))
+  cat("Model details:\n")
+  print(model_details)
+  cat("Top features for train model:\n")
+  print(head(coef_train_df, 10))
+  cat("Top features for test model:\n")
+  print(head(coef_test_df, 10))
+}
 
+# Define a maximum iteration count
+max_iterations <- 10
+iteration <- 0
+accuracy_threshold <- 0.85
 
+repeat {
+  iteration <- iteration + 1
+  cat("Iteration:", iteration, "\n")
+  
+  # Train the model on the training set and predict on the test set
+  cvfit_train <- cv.multiview(x_train, Y_binary_train, family = binomial(), type.measure = "class")
+  best_lambda <- cvfit_train$lambda.min
+  
+  fit_train <- multiview(x_train, Y_binary_train, family = binomial(), lambda = best_lambda)
+  test_probabilities <- predict(fit_train, newx = x_test, s = best_lambda, type = "response")
+  test_predictions <- as.numeric(test_probabilities > 0.5)
+  
+  # Train the model on the test set and predict on the train set
+  cvfit_test <- cv.multiview(x_test, Y_binary_test, family = binomial(), type.measure = "class")
+  best_lambda_test <- cvfit_test$lambda.min
+  
+  fit_test <- multiview(x_test, Y_binary_test, family = binomial(), lambda = best_lambda_test)
+  train_probabilities <- predict(fit_test, newx = x_train, s = best_lambda_test, type = "response")
+  train_predictions <- as.numeric(train_probabilities > 0.5)
+  
+  # Calculate accuracies
+  train_accuracy <- mean(train_predictions == Y_binary_train)
+  test_accuracy <- mean(test_predictions == Y_binary_test)
+  
+  # Print accuracies for this iteration
+  cat(sprintf("Train Accuracy: %.4f, Test Accuracy: %.4f\n", train_accuracy, test_accuracy))
+  
+  # Check if accuracies meet the threshold
+  if (train_accuracy > accuracy_threshold && test_accuracy > accuracy_threshold) {
+    cat("Accuracy threshold met. Saving model details...\n")
+    
+    # Save Model Details
+    model_details <- data.frame(
+      Model = c("Train", "Test"),
+      BestLambda = c(best_lambda, best_lambda_test),
+      Rho = c(fit_train$rho, fit_test$rho),
+      Accuracy = c(train_accuracy, test_accuracy)
+    )
+    write.csv(model_details, file = paste0(output_dir, "/", class_name, "_ModelDetails.csv"), row.names = FALSE)
+    
+    # Save Coefficients for Train and Test Models
+    coef_train <- as.matrix(coef(fit_train, s = best_lambda))[-1, , drop = FALSE]
+    coef_train_df <- data.frame(Feature = rownames(coef_train), Coefficient = coef_train[, 1]) %>%
+      filter(Coefficient != 0) %>%
+      arrange(desc(abs(Coefficient)))
+    write.csv(coef_train_df, file = paste0(output_dir, "/", class_name, "_Train_TopFeatures.csv"), row.names = FALSE)
+    
+    coef_test <- as.matrix(coef(fit_test, s = best_lambda_test))[-1, , drop = FALSE]
+    coef_test_df <- data.frame(Feature = rownames(coef_test), Coefficient = coef_test[, 1]) %>%
+      filter(Coefficient != 0) %>%
+      arrange(desc(abs(Coefficient)))
+    write.csv(coef_test_df, file = paste0(output_dir, "/", class_name, "_Test_TopFeatures.csv"), row.names = FALSE)
+    
+    # Save Predictions for the Main Model
+    results_train <- data.frame(
+      Sample_ID = rownames(x_train[[1]]),
+      Predicted_Probability = train_probabilities,
+      Predicted_Label = ifelse(train_predictions == 1, class_name, paste("Not", class_name)),
+      Actual_Label = ifelse(Y_binary_train == 1, class_name, paste("Not", class_name))
+    )
+    
+    results_test <- data.frame(
+      Sample_ID = rownames(x_test[[1]]),
+      Predicted_Probability = test_probabilities,
+      Predicted_Label = ifelse(test_predictions == 1, class_name, paste("Not", class_name)),
+      Actual_Label = ifelse(Y_binary_test == 1, class_name, paste("Not", class_name))
+    )
+    
+    # Combine and save predictions
+    all_results <- rbind(results_train, results_test) %>%
+      arrange(Sample_ID)
+    write.csv(all_results, file = paste0(output_dir, "/", class_name, "_Predictions.csv"), row.names = FALSE)
+    
+    # Stop the process
+    break
+  
+  }
+  
+  # Stop if the maximum number of iterations is reached
+  if (iteration >= max_iterations) {
+    cat("Max iterations reached. Accuracy threshold not satisfied.\n")
+    break
+  }
+}
 # Classes to process
 # classes <- c("PV","ET", "CTRL")
 
 # Output directory to save results
-output_dir <- "results/co-op_learning/results_whole_dataset_prediction"
+output_dir <- "results/co-op_learning/results_whole_dataset_prediction4"
 if (!dir.exists(output_dir)) {
   dir.create(output_dir)
 }
 # CSV file to save results
-results_file <- "results/co-op_learning/results_whole_dataset_prediction/model_details.csv"
+results_file <- "results/co-op_learning/results_whole_dataset_prediction4/model_details.csv"
 if (file.exists(results_file)) {
   file.remove(results_file)  # Remove old file if exists
 }
 # Classes to process
-classes <- c("PV","ET","CTRL")
-# predict_on_whole_dataset(classes[4], x_train, Y_train, x_test, Y_test, output_dir)
-# Iterate over classes and process each one
+classes <- c("MF","PV","ET","CTRL")
+predict_on_whole_dataset(classes[1], x_train, Y_train, x_test, Y_test, output_dir)
+  # Iterate over classes and process each one
 for (class_name in classes) {
   predict_on_whole_dataset(class_name, x_train, Y_train, x_test, Y_test, output_dir)
 }
