@@ -18,7 +18,7 @@ outcome_data <- read.csv("data/DeSeq2_AllData_n120_PTPRCadj.csv", stringsAsFacto
 # Function to clean sample names
 clean_sample_names <- function(data) {
   # Remove rows with ".y" suffix in the sample name
-  data <- data[!grepl("\\.y$", data[[1]]), ]
+  # data <- data[!grepl("\\.y$", data[[1]]), ]
   # Set row names and remove ".x" suffix
   rownames(data) <- gsub("\\.x$", "", data[[1]])
   data <- data[, -1]  # Remove the first column
@@ -42,29 +42,6 @@ outcome_patients <- rownames(outcome_data)
 # Find common patients
 common_patients <- intersect(intersect(platelet_patients, wbc_patients), outcome_patients)
 cat("Number of common patients:", length(common_patients), "\n")
-
-
-
-
-# platelet_data <- read.csv("data/NormCountsPlatelet.csv")
-# wbc_data <- read_csv("data/NormCountsWBC.csv")
-# outcome_data <- read_csv("data/DeSeq2_AllData_n120_PTPRCadj.csv")
-# 
-# # Remove ".x" suffix from sample names in X and Z
-# rownames(platelet_data) <- gsub("\\.x$", "", rownames(platelet_data))  # For X (Platelet data)
-# rownames(wbc_data) <- gsub("\\.x$", "", rownames(wbc_data))  # For Z (WBC data)
-# rownames(outcome_data) <- gsub("\\.x$", "", rownames(outcome_data)) 
-# # Verify the changes
-# cat("Updated sample names in X:\n", head(rownames()), "\n")
-# cat("Updated sample names in Z:\n", head(rownames(Z)), "\n")
-# # Extract patient IDs
-# platelet_patients <- platelet_data[[1]]
-# wbc_patients <- wbc_data[[1]]
-# outcome_patients <- outcome_data[[1]]
-# # Find common patients
-# common_patients <- intersect(intersect(platelet_patients, wbc_patients), outcome_patients)
-# length(common_patients)
-
 
 # Subset the data for common patients
 X <- platelet_data[common_patients, , drop = FALSE]  # Subset rows using rownames
@@ -99,16 +76,13 @@ set.seed(123)
 
 # Define split ratios
 train_ratio <- 0.5
-val_ratio <- 0
 test_ratio <- 0.5
 
 # Number of samples
 n <- nrow(X)
 train_size = floor(train_ratio * n)
 train_size
-val_size= floor(val_ratio*n)
-val_size
-test_size = n-train_size-val_size
+test_size = n-train_size
 test_size
 # Generate random indices for training, validation, and test sets
 # Generate a shuffled sequence of row indices
@@ -116,34 +90,21 @@ shuffled_indices <- sample(seq_len(n))
 
 # Assign the first `train_size` indices to the training set
 train_indices <- shuffled_indices[1:train_size]
-
-# Assign the next `val_size` indices to the validation set
-#val_indices <- shuffled_indices[(train_size + 1):(train_size + val_size)]
+train_indices
 
 # Assign the remaining indices to the test set
-test_indices <- shuffled_indices[(train_size + val_size + 1):n]
-# For stratified sampling
-library(caret)  
-set.seed(123)
-# Stratified sampling to preserve class proportions
-n <- nrow(X)
-MPNDisease <- Y[, 1, drop = TRUE]
-train_indices <- createDataPartition(MPNDisease, p = train_ratio, list = FALSE)
-test_indices <- setdiff(seq_len(n), train_indices)
+test_indices <- shuffled_indices[(train_size + 1):n]
+test_indices
 # Training set
 X_train <- X[train_indices, ]
 Z_train <- Z[train_indices, ]
-Y_train <- MPNDisease[train_indices]
+Y_train <- MPNDisease[train_indices,]
 
-# Validation set
-#X_val <- X[val_indices, ]
-#Z_val <- Z[val_indices, ]
-#Y_val <- MPNDisease[val_indices, ]
 
 # Test set
 X_test <- X[test_indices, ]
 Z_test <- Z[test_indices, ]
-Y_test <- MPNDisease[test_indices]
+Y_test <- MPNDisease[test_indices,]
 
 # Prepare data for multiview package
 # Convert MPNDisease to a factor
@@ -172,10 +133,10 @@ table(Y_test)
 
 # Prepare Binary Labels for PV
 # Create binary labels: 1 for PV, 0 for others
-Y_binary_train <- as.numeric(Y_train == "ET")
+Y_binary_train <- as.numeric(Y_train == "MF")
 Y_binary_train
 #Y_binary_val <- as.numeric(Y_val == "PV")
-Y_binary_test <- as.numeric(Y_test == "ET")
+Y_binary_test <- as.numeric(Y_test == "MF")
 Y_binary_test
 # Check the distribution of binary labels
 cat("Training set distribution:\n")
@@ -188,20 +149,22 @@ table(Y_binary_test)
 # Perform cross-validation to find the optimal lambda
 cvfit <- cv.multiview(x_train, Y_binary_train, family = binomial(), type.measure = "class")
 best_lambda <- cvfit$lambda.min
-
+best_lambda
 # Lambda with the most regularization that is within 1 standard error of the minimum error
 lambda_1se <- cvfit$lambda.1se
-
+lambda_1se
 # Plot cross-validation results
 plot(cvfit)
+print(cvfit)
+coef(cvfit)
 # Highlight the selected lambda values
 abline(v = log(best_lambda), col = "blue", lty = 2)  # Optimal lambda
 abline(v = log(lambda_1se), col = "red", lty = 2)    # 1-SE lambda
 
 # Refit the model with the optimal lambda
-fit_optimized <- multiview(x_train, Y_binary_train, family = binomial(), lambda = best_lambda)
-best_rho <- fit_optimized$rho
-best_rho
+fit_optimized <- multiview(x_train, Y_binary_train, family = binomial(),rho=4, lambda = best_lambda)
+rho <- fit_optimized$rho
+rho
 # Optimal lambda minimizing cross-validation error
 # Make predictions on the test set
 test_probabilities <- predict(fit_optimized, newx = x_test, s = best_lambda, type = "response")
@@ -563,3 +526,74 @@ cat("Multinomial Classification Accuracy:", multinomial_accuracy, "\n")
 multinomial_confusion_matrix <- table(Predicted = final_predictions, Actual = Y_test)
 cat("Confusion Matrix for Multinomial Classification:\n")
 print(multinomial_confusion_matrix)
+
+
+#3
+
+predict_on_whole_dataset <- function(class_name, x_train, Y_train, x_test, Y_test, output_dir, results_file) {
+  # Binary labeling for the target class
+  # class_name = "MF"
+  Y_binary_train <- as.numeric(Y_train == class_name)
+  Y_binary_test <- as.numeric(Y_test == class_name)
+  
+  # Train the model on the training set and predict on the test set
+  cvfit_train <- cv.multiview(x_train, Y_binary_train, family = binomial(), type.measure = "class")
+  best_lambda <- cvfit_train$lambda.min
+  
+  fit_train <- multiview(x_train, Y_binary_train, family = binomial(), lambda = best_lambda)
+  test_probabilities <- predict(fit_train, newx = x_test, s = best_lambda, type = "response")
+  test_predictions <- as.numeric(test_probabilities > 0.5)
+  
+  # Train the model on the test set and predict on the train set
+  cvfit_test <- cv.multiview(x_test, Y_binary_test, family = binomial(), type.measure = "class")
+  best_lambda_test <- cvfit_test$lambda.min
+  
+  fit_test <- multiview(x_test, Y_binary_test, family = binomial(), lambda = best_lambda_test)
+  train_probabilities <- predict(fit_test, newx = x_train, s = best_lambda_test, type = "response")
+  train_predictions <- as.numeric(train_probabilities > 0.5)
+  
+  # Combine predictions for both sets with dynamic labels
+  results_train <- data.frame(
+    Sample_ID = rownames(x_train[[1]]),
+    Predicted_Probability = train_probabilities,
+    Predicted_Label = ifelse(train_predictions == 1, class_name, paste("Not", class_name)),
+    Actual_Label = ifelse(Y_binary_train == 1, class_name, paste("Not", class_name))
+  )
+  
+  results_test <- data.frame(
+    Sample_ID = rownames(x_test[[1]]),
+    Predicted_Probability = test_probabilities,
+    Predicted_Label = ifelse(test_predictions == 1, class_name, paste("Not", class_name)),
+    Actual_Label = ifelse(Y_binary_test == 1, class_name, paste("Not", class_name))
+  )
+  # Combine and save to a CSV file
+  all_results <- rbind(results_train, results_test) %>%
+    arrange(Sample_ID)
+  write.csv(all_results, file = paste0(output_dir, "/", class_name, "_Predictions.csv"), row.names = FALSE)
+  
+  # Output to console for verification
+  cat("Results saved for class", class_name, "\n")
+  print(head(all_results))
+}
+
+
+# Classes to process
+# classes <- c("PV","ET", "CTRL")
+
+# Output directory to save results
+output_dir <- "results/co-op_learning/results_whole_dataset_prediction"
+if (!dir.exists(output_dir)) {
+  dir.create(output_dir)
+}
+# CSV file to save results
+results_file <- "results/co-op_learning/results_whole_dataset_prediction/model_details.csv"
+if (file.exists(results_file)) {
+  file.remove(results_file)  # Remove old file if exists
+}
+# Classes to process
+classes <- c("PV","ET","CTRL")
+# predict_on_whole_dataset(classes[4], x_train, Y_train, x_test, Y_test, output_dir)
+# Iterate over classes and process each one
+for (class_name in classes) {
+  predict_on_whole_dataset(class_name, x_train, Y_train, x_test, Y_test, output_dir)
+}
