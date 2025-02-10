@@ -8,8 +8,8 @@ library(ggplot2)
 # PART 1 :: Load and preprocess data
 #===============================================================================
 # Load the datasets
-platelet_data <- read.csv("data/NormCountsPlatelet.csv", stringsAsFactors = FALSE)
-wbc_data <- read.csv("data/NormCountsWBC.csv", stringsAsFactors = FALSE)
+platelet_data <- read.csv("data/NormCountsPlateletAdjusted.csv", stringsAsFactors = FALSE)
+wbc_data <- read.csv("data/NormCountsWBCAdjusted.csv", stringsAsFactors = FALSE)
 outcome_data <- read.csv("data/DeSeq2_AllData_n120_PTPRCadj.csv", stringsAsFactors = FALSE)
 
 clean_sample_names <- function(data) {
@@ -173,7 +173,7 @@ multiview_subtype_vs_control <- function(subtype, X, Z, Y, output_dir, seed = 12
 subtypes <- c("PV", "ET", "MF")
 
 # Output directory
-output_dir <- "results/co-op_learning/results_subtype_vs_control_consistency_3"
+output_dir <- "results/co-op_learning/results_adjusted_subtype_vs_control_consistent"
 if (!dir.exists(output_dir)) {
   dir.create(output_dir, recursive = TRUE)
 }

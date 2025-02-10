@@ -11,10 +11,12 @@ setwd("~/Library/CloudStorage/Box-Box/KrishnanA-Stats-Share/LucyExtendedTermProj
 # Load the datasets
 # Load the datasets
 # Load data
-platelet_data <- read.csv("data/NormCountsPlatelet.csv", stringsAsFactors = FALSE)
-wbc_data <- read.csv("data/NormCountsWBC.csv", stringsAsFactors = FALSE)
+# platelet_data <- read.csv("data/NormCountsPlatelet.csv", stringsAsFactors = FALSE)
+# wbc_data <- read.csv("data/NormCountsWBC.csv", stringsAsFactors = FALSE)
+# outcome_data <- read.csv("data/DeSeq2_AllData_n120_PTPRCadj.csv", stringsAsFactors = FALSE)
+platelet_data <- read.csv("data/NormCountsPlateletAdjusted.csv", stringsAsFactors = FALSE)
+wbc_data <- read.csv("data/NormCountsWBCAdjusted.csv", stringsAsFactors = FALSE)
 outcome_data <- read.csv("data/DeSeq2_AllData_n120_PTPRCadj.csv", stringsAsFactors = FALSE)
-
 # Function to clean sample names
 clean_sample_names <- function(data) {
   # Remove rows with ".y" suffix in the sample name
@@ -468,12 +470,12 @@ dev.off()  # Close the graphics device
 classes <- c("PV","ET", "MF", "CTRL")
 
 # Output directory to save results
-output_dir <- "results_stratified_sampled"
+output_dir <- "results/co-op_learning/results_adjusted_mf"
 if (!dir.exists(output_dir)) {
   dir.create(output_dir)
 }
 # CSV file to save results
-results_file <- "results_stratified_sampled/model_details.csv"
+results_file <- "results/co-op_learning/results_adjusted_mf/model_details.csv"
 if (file.exists(results_file)) {
   file.remove(results_file)  # Remove old file if exists
 }
@@ -762,13 +764,14 @@ repeat {
 # Classes to process
 # classes <- c("PV","ET", "CTRL")
 
+
 # Output directory to save results
-output_dir <- "results/co-op_learning/results_whole_dataset_prediction4"
+output_dir <- "results/co-op_learning/results_adjusted_mf"
 if (!dir.exists(output_dir)) {
   dir.create(output_dir)
 }
 # CSV file to save results
-results_file <- "results/co-op_learning/results_whole_dataset_prediction4/model_details.csv"
+results_file <- "results/co-op_learning/results_adjusted_mf/model_details.csv"
 if (file.exists(results_file)) {
   file.remove(results_file)  # Remove old file if exists
 }

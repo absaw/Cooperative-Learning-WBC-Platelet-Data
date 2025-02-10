@@ -9,7 +9,7 @@ library(PRROC)
 # Read the results file for predictions
 setwd("~/Library/CloudStorage/Box-Box/KrishnanA-Stats-Share/LucyExtendedTermProjects/Project5-WBC_RNAseq-Analysis/WBC-Platelet-Coop-Learning-AS/Cooperative-Learning-WBC-Platelet-Data")
 
-results <- read.csv("results/co-op_learning/results_whole_dataset_prediction_final/MF_Predictions.csv")
+results <- read.csv("results/co-op_learning/results_adjusted_mf/MF_Predictions.csv")
 
 # Verify the structure of the results file
 head(results)
@@ -81,6 +81,6 @@ p <- p + annotate("text", x = 0.85, y = 0.05,
 # Display the plot
 print(p)
 
-output_dir <- "results/co-op_learning/results_whole_dataset_prediction_final"
+output_dir <- "results/co-op_learning/results_adjusted_mf"
 # Save the ROC plot as a PNG file
 ggsave(paste0(output_dir,"/MF_ROC_Curve.png"), plot = p, width = 8, height = 6, dpi = 300)

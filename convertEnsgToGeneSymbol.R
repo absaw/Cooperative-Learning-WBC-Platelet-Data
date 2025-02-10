@@ -49,8 +49,8 @@ replace_ensg_with_symbols <- function(input_csv, output_csv) {
 }
 
 # Usage
-input_file <- "InputNormCountFiles/NormCountsPlatelet.csv"  # Input CSV file
-output_file <- "InputNormCountFiles/NormCountsPlateletGeneSymbol.csv"  # Output CSV file
+input_file <- "data/NormCountsWBCAdjusted.csv"  # Input CSV file
+output_file <- "data/NormCountsWBCAdjustedWithGeneSymbol.csv"  # Output CSV file
 data <- read_csv(input_file)
 
 replace_ensg_with_symbols(input_file, output_file)
