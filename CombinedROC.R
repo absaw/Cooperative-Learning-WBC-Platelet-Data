@@ -7,11 +7,12 @@ library(PRROC)
 # PART 1: Load the Results Files
 #===============================================================================
 # Load datasets for predictions
-wbc_multi_res <- read.csv("../Results/WBC_MultiLasso_Group_Prediction_OverlapWBC-Platelet_n~72.csv")
-plate_multi_res <- read.csv("../Results/Platelet_MultiLasso_Group.csv")
-base_res <- read.csv("../Results/BaseMultinomial.csv")
-coop_learning_res <- read.csv("results/co-op_learning/results_whole_dataset_prediction_final/MF_Predictions.csv")
-
+setwd("~/Library/CloudStorage/Box-Box/KrishnanA-Stats-Share/LucyExtendedTermProjects/Project5-WBC_RNAseq-Analysis/WBC-Platelet-Coop-Learning-AS/Cooperative-Learning-WBC-Platelet-Data")
+wbc_multi_res <- read.csv("data/WBC_MultiLasso_Group_Prediction_OverlapWBC-Platelet_n~72.csv")
+plate_multi_res <- read.csv("data/Platelet_MultiLasso_Group.csv")
+base_res <- read.csv("data/BaseMultinomial.csv")
+# coop_learning_res <- read.csv("results/co-op_learning/results_whole_dataset_prediction_final/MF_Predictions.csv")
+coop_learning_res <- read.csv("results/co-op_learning/results_adjusted_mf/MF_Predictions.csv")
 #===============================================================================
 # PART 2: Prepare ROC Data for Each Model
 #===============================================================================
@@ -42,8 +43,8 @@ roc_base <- generate_roc_data(
 
 # Co-op Learning Model
 roc_coop <- generate_roc_data(
-  fg = coop_learning_res$Predicted_Probability[coop_learning_res$Actual_Label == "MF"],
-  bg = coop_learning_res$Predicted_Probability[coop_learning_res$Actual_Label != "MF"]
+  fg = coop_learning_res$s1[coop_learning_res$Actual_Label == "MF"],
+  bg = coop_learning_res$s1[coop_learning_res$Actual_Label != "MF"]
 )
 
 #===============================================================================
@@ -62,7 +63,7 @@ colors <- c(
   "WBC Lasso Logistic" = "red",
   "Platelet Lasso Logistic" = "blue",
   "Baseline Logistic" = "black",
-  "Co-op Learning" = "green"
+  "Co-op Learning" = "orange"
 )
 
 # Create the ROC plot
@@ -73,7 +74,7 @@ p <- ggplot() +
   scale_y_continuous(limits = c(0, 1.005), breaks = seq(0, 1, 0.1)) +
   scale_color_manual(name = "", values = colors) +
   labs(
-    title = "Combined ROC Curves",
+    title = "Combined ROC Curves(MF vs Non - MF)",
     x = "False Positive Rate",
     y = "True Positive Rate"
   ) +
@@ -97,7 +98,7 @@ p <- ggplot() +
 print(p)
 
 # Save the plot as a PNG file
-output_dir <- "results/combined_roc"
+output_dir <- "results/"
 if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
 ggsave(
   filename = file.path(output_dir, "Combined_ROC_Curve.png"),
